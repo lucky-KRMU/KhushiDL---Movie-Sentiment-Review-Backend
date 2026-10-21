@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: khushidl-movie-sentiment-backend
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: TF_ENABLE_ONEDNN_OPTS
+        value: "0"
+      - key: TF_CPP_MIN_LOG_LEVEL
+        value: "2"
+      - key: KERAS_BACKEND
+        value: tensorflow
+      - key: ALLOWED_ORIGINS
+        value: "*"

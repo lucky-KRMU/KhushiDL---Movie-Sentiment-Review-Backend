@@ -3,8 +3,21 @@ import re
 import time
 import logging
 from typing import List, Dict, Any, Tuple
+
+# Optimize TensorFlow & Keras for cloud deployment (e.g. Render 512MB RAM free tier)
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # Suppress non-critical logs
+os.environ.setdefault("KERAS_BACKEND", "tensorflow")
+
 import tensorflow as tf
 import keras
+
+# Constrain thread pools to prevent memory ballooning and CPU contention on container runtimes
+try:
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+    tf.config.threading.set_intra_op_parallelism_threads(2)
+except Exception:
+    pass
 
 logger = logging.getLogger("khushidl.model")
 
@@ -29,7 +42,7 @@ NEGATIVE_KEYWORDS = {
 }
 
 class SentimentModelService:
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str = None, eager_load: bool = False):
         if model_path is None:
             # Locate relative to backend root
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,7 +51,13 @@ class SentimentModelService:
         self.model_path = model_path
         self.model = None
         self.is_loaded = False
-        self.load_model()
+        if eager_load:
+            self.load_model()
+
+    def ensure_loaded(self):
+        """Ensures the model is loaded before inference."""
+        if not self.is_loaded or self.model is None:
+            self.load_model()
 
     def load_model(self):
         try:
@@ -88,8 +107,7 @@ class SentimentModelService:
             return "Overwhelmingly Negative"
 
     def predict_single(self, review: str) -> Dict[str, Any]:
-        if not self.is_loaded or self.model is None:
-            raise RuntimeError("Model is not initialized.")
+        self.ensure_loaded()
 
         clean_review = review.strip()
         start_time = time.perf_counter()
@@ -121,8 +139,7 @@ class SentimentModelService:
         }
 
     def predict_batch(self, reviews: List[str]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        if not self.is_loaded or self.model is None:
-            raise RuntimeError("Model is not initialized.")
+        self.ensure_loaded()
 
         clean_reviews = [r.strip() for r in reviews if r.strip()]
         if not clean_reviews:
@@ -167,5 +184,5 @@ class SentimentModelService:
         return results, summary
 
 
-# Global singleton instance
-model_service = SentimentModelService()
+# Global singleton instance (loads during FastAPI lifespan or on first call)
+model_service = SentimentModelService(eager_load=False)

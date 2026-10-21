@@ -1,3 +1,4 @@
+import os
 import time
 from typing import List
 from contextlib import asynccontextmanager
@@ -19,7 +20,7 @@ from app.model_service import model_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Model is initialized on import, ensure it's healthy
+    # Initialize and warm up model on startup
     if not model_service.is_loaded:
         model_service.load_model()
     yield
@@ -31,11 +32,19 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS for frontend integration
+# Configure CORS - can be overridden via ALLOWED_ORIGINS env var
+raw_origins = os.getenv("ALLOWED_ORIGINS", "*").strip()
+if raw_origins == "*" or not raw_origins:
+    origins = ["*"]
+    allow_credentials = False
+else:
+    origins = [orig.strip() for orig in raw_origins.split(",") if orig.strip()]
+    allow_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -44,6 +53,11 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 def health_check():
     """Health check endpoint to verify backend service and model readiness."""
+    if not model_service.is_loaded:
+        try:
+            model_service.load_model()
+        except Exception:
+            pass
     return HealthResponse(
         status="healthy" if model_service.is_loaded else "degraded",
         app_name="KhushiDL - Movie Sentiment Review API",

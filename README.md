@@ -74,5 +74,63 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ### 2. Run Test Suite
 ```bash
-./venv/bin/python test_api.py
+./venv/bin/pytest
 ```
+
+---
+
+## ☁️ Deploying to Render
+
+This backend has been pre-configured and optimized specifically for **[Render](https://render.com/)**, including low-memory container tuning for Render's 512MB RAM free tier.
+
+### Method 1: Automatic Blueprint (Recommended - One Click)
+1. Push your changes to GitHub.
+2. In the Render Dashboard, click **New +** -> **Blueprint**.
+3. Connect your repository: `https://github.com/lucky-KRMU/KhushiDL---Movie-Sentiment-Review-Backend`.
+4. Render will automatically detect [`render.yaml`](render.yaml) and configure:
+   - **Runtime**: Python 3.12
+   - **Build Command**: `pip install --upgrade pip && pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`
+   - **Health Check Path**: `/health`
+   - Pre-configured environment variables for TensorFlow CPU optimization.
+5. Click **Apply**.
+
+---
+
+### Method 2: Manual Web Service Setup
+If creating a Web Service manually on Render:
+1. Click **New +** -> **Web Service**.
+2. Connect your GitHub repository.
+3. Configure the following settings:
+   - **Language / Runtime**: `Python`
+   - **Branch**: `main`
+   - **Region**: Oregon (or closest to your users)
+   - **Instance Type**: `Free`
+   - **Build Command**: `pip install --upgrade pip && pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`
+4. In **Advanced Settings**:
+   - **Health Check Path**: `/health`
+   - **Environment Variables**:
+     - `PYTHON_VERSION`: `3.12.8`
+     - `TF_ENABLE_ONEDNN_OPTS`: `0`
+     - `TF_CPP_MIN_LOG_LEVEL`: `2`
+     - `KERAS_BACKEND`: `tensorflow`
+     - `ALLOWED_ORIGINS`: `*` (or your frontend's Render/Vercel URL)
+5. Click **Create Web Service**.
+
+---
+
+### Method 3: Docker Deployment
+Render also supports building from [`Dockerfile`](Dockerfile):
+1. Create a **Web Service** on Render and choose **Docker** runtime.
+2. Render will automatically build the image using the lightweight `python:3.12-slim` base and start the container with internal health checks.
+
+---
+
+### ⚙️ Cloud Optimizations Applied:
+- **`tensorflow-cpu` on Linux**: Uses lightweight CPU-only wheels on Render (reducing slug size by ~1.5GB and speeding up build times by >5x).
+- **Single Worker (`--workers 1`)**: Restricts memory footprint to ~250MB, safely within Render's 512MB RAM free tier limit.
+- **Thread Pool Limiting**: Configured `inter_op` (1) and `intra_op` (2) threads in TensorFlow to prevent memory spikes and CPU throttling.
+- **Dynamic Port Binding**: Listens dynamically on `$PORT` assigned by Render's routing proxy.
+- **Configurable CORS**: Supports `ALLOWED_ORIGINS` for cross-origin frontend requests.
+
